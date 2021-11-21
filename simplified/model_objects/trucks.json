@@ -1,0 +1,8 @@
+{
+    "V1": {
+        "avgSpeed": 60.0,
+        "maxCapacity": 1000,
+        "rentCost": 240.0,
+        "kmCost": 24.0
+    }
+}

@@ -1,4 +1,6 @@
-from distribution import create_model, prepare_data, print_solution, save_solution, set_objective, solve_problem
+from distribution import \
+    create_model, prepare_data, print_solution, \
+    save_solution, set_objective, solve_problem
 
 
 def main():

@@ -1,0 +1,17 @@
+{
+    "P1": {
+        "start": "A1",
+        "end": "U1",
+        "distance": 320
+    },
+    "P2": {
+        "start": "A2",
+        "end": "U1",
+        "distance": 100
+    },
+    "P3": {
+        "start": "A2",
+        "end": "U2",
+        "distance": 50
+    }
+}

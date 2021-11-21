@@ -1,8 +1,8 @@
-from distribution import create_model, prepare_data, print_solution, set_objective, solve_problem
+from distribution import create_model, prepare_data, print_solution, save_solution, set_objective, solve_problem
 
 
 def main():
-    model_objects_path = 'model_objects/'
+    model_objects_path = 'tests/sanity_test/'
 
     model = create_model()
 
@@ -12,6 +12,7 @@ def main():
     solution = solve_problem(model)
     if solution:
         print_solution(model)
+        save_solution(solution, test_path=model_objects_path)
 
 
 if __name__ == '__main__':

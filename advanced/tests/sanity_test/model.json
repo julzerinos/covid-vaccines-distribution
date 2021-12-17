@@ -1,0 +1,49 @@
+{
+    "vaccines": {
+        "I1": {
+            "lifetime": 8
+        }
+    },
+    "trucks": {
+        "V1": {
+            "avgSpeed": 60.0,
+            "maxCapacity": 100,
+            "rentCost": 240.0,
+            "kmCost": 24.0
+        }
+    },
+    "airports": {
+        "A1": {
+            "deliveryAmount": 1000
+        },
+        "A2": {
+            "deliveryAmount": 150
+        }
+    },
+    "vaccinationPoints": {
+        "U1": {
+            "demand": 100
+        }
+    },
+    "warehouses": {
+        "S1": {},
+        "S2": {}
+    },
+    "routes": {
+        "P1": {
+            "start": "A1",
+            "end": "S1",
+            "distance": 320
+        },
+        "P2": {
+            "start": "S1",
+            "end": "S2",
+            "distance": 320
+        },
+        "P3": {
+            "start": "S2",
+            "end": "U1",
+            "distance": 320
+        }
+    }
+}

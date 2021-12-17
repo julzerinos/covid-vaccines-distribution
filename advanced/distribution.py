@@ -58,15 +58,9 @@ def prepare_data(model: Model, objects_path='.') -> LinearExpr:
 
     # Decision variables ##
 
-    # ~~TODO: dvar for vaccine type per track
     vaccine_point_quantities = model.integer_var_dict(
         route_vaccine_point_combinations, name='dvar_vaccine_point_quantity_per_route'
     )
-
-    # ~~TODO: make this an expression (sum all vaccine types)
-    # vaccine_quantities = model.integer_var_dict(
-    #     routes, name="dvar_vaccines_per_route"
-    # )
 
     truck_routes = model.integer_var_dict(
         truck_route_combinations, name="dvar_trucks_per_route"
@@ -74,7 +68,6 @@ def prepare_data(model: Model, objects_path='.') -> LinearExpr:
 
     # Expressions ##
 
-    # TODO: vaccine quantities per route
     # Total number of vaccines on a route
     vaccine_quantities = {
         r: model.sum(
@@ -94,12 +87,28 @@ def prepare_data(model: Model, objects_path='.') -> LinearExpr:
         for tr, amount in truck_routes.items()
     )
 
-    # TODO: count time looking from last point backwards
+    # Travel times of each vaccine source-destination type
+    vaccine_travel_times = {
+        vpname: model.sum(
+            model.min(vaccine_point_quantities[rvpname], 1) *
+            route_time_for_truck(routes[rvp['route']], truck_types["V1"])
+            for rvpname, rvp in route_vaccine_point_combinations.items()
+            if rvp['vaccine_point'] == vpname
+        ) for vpname in vaccine_point_combinations
+    }
 
     # Constraints ##
 
-    # ~~TODO: sum of all vaccine-point tracks at most load of airport
+    for vpname, vp in vaccine_point_combinations.items():
+        model.add_constraint(
+            vaccine_travel_times[vpname]
+            <=
+            vaccine_types[vp['vaccine']]['lifetime'],
+            ctname="ct_vaccine_travel_time"
+        )
+
     # Routes from airports can have at most the delivery amount of the airport
+    #   of any vaccine type
     for pname, point in airports.items():
         model.add_constraint(
             model.sum(
@@ -110,9 +119,8 @@ def prepare_data(model: Model, objects_path='.') -> LinearExpr:
             ctname="ct_airport_max_" + pname
         )
 
-    # ~~TODO: sum of vaccine-point track for point at least demand for point
     # Sum of routes to the vaccination points must have
-    # at least the demand of the point
+    #   at least the demand of the point (of vaccines destined for that point)
     for pname, point in vaccination_points.items():
         model.add_constraint(
             model.sum(
@@ -124,9 +132,8 @@ def prepare_data(model: Model, objects_path='.') -> LinearExpr:
             ctname="ct_airport_max_" + pname
         )
 
-    # ~~TODO: for any vaccine types
     # Sum of truck capacity must be at least the amount of vaccines
-    # transported on its route
+    #   transported on its route (of any vaccine destination)
     for r in routes:
         model.add_constraint(
             model.sum(
@@ -155,8 +162,8 @@ def prepare_data(model: Model, objects_path='.') -> LinearExpr:
     #             ctname='ct_vaccine_lifetime' + trname + vname
     #         )
 
-    # TODO: warehouse points in == out for any vaccine types
     # For warehouse points, incoming vaccines should be equal to outgoing
+    #   for those specific vaccine destinations
     for w in warehouses:
         for vp in vaccine_point_combinations:
             warehouse_routes = point_edge_lookup[w]
@@ -177,6 +184,8 @@ def prepare_data(model: Model, objects_path='.') -> LinearExpr:
     return f, [
         lambda: print([f"{aname}, {a.solution_value}" for aname,
                       a in vaccine_quantities.items()]),
+        lambda: print([f"{aname}, {a.solution_value}" for aname,
+                       a in vaccine_travel_times.items()]),
     ]
 
 

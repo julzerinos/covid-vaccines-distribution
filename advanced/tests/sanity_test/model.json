@@ -1,7 +1,7 @@
 {
     "vaccines": {
         "I1": {
-            "lifetime": 8
+            "lifetime": 4
         }
     },
     "trucks": {
@@ -23,6 +23,9 @@
     "vaccinationPoints": {
         "U1": {
             "demand": 100
+        },
+        "U2": {
+            "demand": 50
         }
     },
     "warehouses": {
@@ -33,17 +36,22 @@
         "P1": {
             "start": "A1",
             "end": "S1",
-            "distance": 320
+            "distance": 60
         },
         "P2": {
             "start": "S1",
             "end": "S2",
-            "distance": 320
+            "distance": 60
         },
         "P3": {
             "start": "S2",
             "end": "U1",
-            "distance": 320
+            "distance": 60
+        },
+        "P4": {
+            "start": "A1",
+            "end": "U2",
+            "distance": 240
         }
     }
 }

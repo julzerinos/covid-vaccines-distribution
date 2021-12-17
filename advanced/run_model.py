@@ -13,12 +13,11 @@ def main():
 
     solution = solve_problem(model)
 
+    model.report()
     if solution:
         [a() for a in args]
         print_solution(model)
         save_solution(solution, test_path=model_objects_path)
-    else:
-        print('No solution found.')
 
 
 if __name__ == '__main__':

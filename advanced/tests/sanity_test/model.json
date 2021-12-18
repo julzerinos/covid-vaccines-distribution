@@ -10,48 +10,40 @@
             "maxCapacity": 100,
             "rentCost": 240.0,
             "kmCost": 24.0
+        },
+        "V2": {
+            "avgSpeed": 100.0,
+            "maxCapacity": 100,
+            "rentCost": 24.0,
+            "kmCost": 24.0
         }
     },
     "airports": {
         "A1": {
-            "deliveryAmount": 1000
+            "deliveryAmount": 500
         },
         "A2": {
-            "deliveryAmount": 150
+            "deliveryAmount": 500
         }
     },
     "vaccinationPoints": {
         "U1": {
-            "demand": 100
-        },
-        "U2": {
-            "demand": 50
+            "demand": 200
         }
     },
     "warehouses": {
-        "S1": {},
-        "S2": {}
+        "S1": {}
     },
     "routes": {
         "P1": {
             "start": "A1",
-            "end": "S1",
-            "distance": 60
-        },
-        "P2": {
-            "start": "S1",
-            "end": "S2",
-            "distance": 60
-        },
-        "P3": {
-            "start": "S2",
             "end": "U1",
             "distance": 60
         },
         "P4": {
-            "start": "A1",
-            "end": "U2",
-            "distance": 240
+            "start": "A2",
+            "end": "U1",
+            "distance": 120
         }
     }
 }

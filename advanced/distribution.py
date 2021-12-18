@@ -49,11 +49,16 @@ def prepare_data(model: Model, objects_path='.') -> LinearExpr:
     }
 
     vaccine_point_combinations = {
-        v + p: {'vaccine': v, 'point': p} for v in vaccine_types for p in vaccination_points
+        v + p + a: {'vaccine': v, 'point': p, 'airport': a} for v in vaccine_types for p in vaccination_points for a in airports
     }
 
     route_vaccine_point_combinations = {
-        r + vp: {'route': r, 'vaccine_point': vp} for vp in vaccine_point_combinations for r in routes
+        r + v + p + a: {'route': r, 'vaccine': v, 'point': p, 'airport': a}
+        for v in vaccine_types for p in vaccination_points for a in airports for r in routes
+    }
+
+    truck_route_times = {
+        r + t: route_time_for_truck(route, truck) for t, truck in truck_types.items() for r, route in routes.items()
     }
 
     # Decision variables ##
@@ -72,8 +77,8 @@ def prepare_data(model: Model, objects_path='.') -> LinearExpr:
     vaccine_quantities = {
         r: model.sum(
             amount
-            for vprname, amount in vaccine_point_quantities.items()
-            if route_vaccine_point_combinations[vprname]['route'] == r
+            for vpraname, amount in vaccine_point_quantities.items()
+            if route_vaccine_point_combinations[vpraname]['route'] == r
         ) for r in routes
     }
 
@@ -87,32 +92,51 @@ def prepare_data(model: Model, objects_path='.') -> LinearExpr:
         for tr, amount in truck_routes.items()
     )
 
+    # TODO: this has to be dependant what trucks are travelling the total route
     # Travel times of each vaccine source-destination type
-    vaccine_travel_times = {
-        vpname: model.sum(
-            model.min(vaccine_point_quantities[rvpname], 1) *
-            route_time_for_truck(routes[rvp['route']], truck_types["V1"])
-            for rvpname, rvp in route_vaccine_point_combinations.items()
-            if rvp['vaccine_point'] == vpname
-        ) for vpname in vaccine_point_combinations
-    }
+    # vaccine_travel_times = {
+    #     vpname: model.sum(
+    #         model.min(vaccine_point_quantities[rvpname], 1)
+    #         *
+    #         model.max(
+    #             truck_route_times[tr]
+    #             for tr in truck_routes
+    #             if truck_route_combinations[tr]['route'] == rvp['route']
+    #         )
+    #         for rvpname, rvp in route_vaccine_point_combinations.items()
+    #         if rvp['vaccine_point'] == vpname
+    #     ) for vpname in vaccine_point_combinations
+    # }
 
     # Constraints ##
 
-    for vpname, vp in vaccine_point_combinations.items():
-        model.add_constraint(
-            vaccine_travel_times[vpname]
-            <=
-            vaccine_types[vp['vaccine']]['lifetime'],
-            ctname="ct_vaccine_travel_time"
-        )
+    # TODO: time constraint
+    # Vaccine travel time is lower or equal to its travel lifetime
+    # for vpname, vp in vaccine_point_combinations.items():
+    #     model.add_constraint(
+    #         vaccine_travel_times[vpname]
+    #         <=
+    #         vaccine_types[vp['vaccine']]['lifetime'],
+    #         ctname="ct_vaccine_travel_time"
+    #     )
 
     # Routes from airports can have at most the delivery amount of the airport
     #   of any vaccine type
     for pname, point in airports.items():
+        print([
+                rvpaname
+                for rvpaname, rvpa in route_vaccine_point_combinations.items()
+                if rvpa['airport'] == pname
+                and rvpa['route'] in point_edge_lookup[pname]['out'] 
+        ])
+        print(point['deliveryAmount'])
         model.add_constraint(
             model.sum(
-                vaccine_quantities[r] for r in point_edge_lookup[pname]['out']
+                vaccine_point_quantities[rvpaname]
+                for rvpaname, rvpa in route_vaccine_point_combinations.items()
+                if rvpa['airport'] == pname
+                and rvpa['route'] in point_edge_lookup[pname]['out']
+                # vaccine_quantities[r] for r in point_edge_lookup[pname]['out']
             )
             <=
             point['deliveryAmount'],
@@ -124,13 +148,32 @@ def prepare_data(model: Model, objects_path='.') -> LinearExpr:
     for pname, point in vaccination_points.items():
         model.add_constraint(
             model.sum(
-                vaccine_point_quantities[vprname]
-                for vprname, vpr in route_vaccine_point_combinations.items()
-                if vpr['route'] in point_edge_lookup[pname]['in']
-                and vaccine_point_combinations[vpr['vaccine_point']]['point'] == pname
-            ) >= point['demand'],
+                vaccine_point_quantities[vpraname]
+                for vpraname, vpra in route_vaccine_point_combinations.items()
+                if vpra['route'] in point_edge_lookup[pname]['in']
+                and vpra['point'] == pname
+            )
+            >=
+            point['demand'],
             ctname="ct_airport_max_" + pname
         )
+
+    # For warehouse points, incoming vaccines should be equal to outgoing
+    #   for those specific vaccine destinations
+    for w in warehouses:
+        warehouse_routes = point_edge_lookup[w]
+        for vpaname in vaccine_point_combinations:
+            model.add_constraint(
+                model.sum(
+                    vaccine_point_quantities[r + vpaname]
+                    for r in warehouse_routes['in']
+                )
+                ==
+                model.sum(
+                    vaccine_point_quantities[r + vpaname]
+                    for r in warehouse_routes['out']
+                )
+            )
 
     # Sum of truck capacity must be at least the amount of vaccines
     #   transported on its route (of any vaccine destination)
@@ -148,44 +191,13 @@ def prepare_data(model: Model, objects_path='.') -> LinearExpr:
             ctname='ct_truck_capacity_at_least' + r
         )
 
-    # TODO: for paths to each next point (warehouse, point) find min time then sum up (expression)
-    # Vaccines must make it to the vaccination points in time smaller than
-    # their travel lifetime
-    # for trname, tr in truck_route_combinations.items():
-    #     for vname, v in vaccine_types.items():
-    #         model.add_constraint(
-    #             truck_routes[trname]
-    #             * route_time_for_truck(
-    #                     routes[tr['route']], truck_types[tr['truck']]
-    #                 )
-    #             <= truck_routes[trname] * v['lifetime'],
-    #             ctname='ct_vaccine_lifetime' + trname + vname
-    #         )
-
-    # For warehouse points, incoming vaccines should be equal to outgoing
-    #   for those specific vaccine destinations
-    for w in warehouses:
-        for vp in vaccine_point_combinations:
-            warehouse_routes = point_edge_lookup[w]
-            model.add_constraint(
-                model.sum(
-                    vaccine_point_quantities[r + vp] for r in warehouse_routes['in']
-                )
-                ==
-                model.sum(
-                    vaccine_point_quantities[r + vp] for r in warehouse_routes['out']
-                )
-            )
-
     # Objective function - cost of the distribution ##
 
     f = trucks_rent_cost
 
     return f, [
-        lambda: print([f"{aname}, {a.solution_value}" for aname,
-                      a in vaccine_quantities.items()]),
-        lambda: print([f"{aname}, {a.solution_value}" for aname,
-                       a in vaccine_travel_times.items()]),
+        # lambda: print(
+        # [[aname, a.solution_value] for aname, a in vaccine_travel_times.items()])
     ]
 
 

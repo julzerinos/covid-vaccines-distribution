@@ -1,7 +1,7 @@
 # Required cplex setup
 #   Run `python ./setup.py install` in the
 #   cplex/python application installation folder
-# More details https://www.ibm.com/docs/en/SSSA5P_12.8.0/ilog.odms.cplex.help/CPLEX/GettingStarted/topics/set_up/Python_setup.html # noqa: E501
+# More details https://www.ibm.com/docs/en/SSSA5P_12.8.0/ilog.odms.cplex.help/CPLEX/GettingStarted/topics/set_up/Python_setup.html
 
 import json
 from docplex.mp.model import Model
@@ -49,7 +49,10 @@ def prepare_data(model: Model, objects_path='.') -> LinearExpr:
     }
 
     vaccine_point_combinations = {
-        v + p + a: {'vaccine': v, 'point': p, 'airport': a} for v in vaccine_types for p in vaccination_points for a in airports
+        v + p + a: {'vaccine': v, 'point': p, 'airport': a}
+        for v in vaccine_types
+        for p in vaccination_points
+        for a in airports
     }
 
     route_vaccine_point_combinations = {
@@ -57,8 +60,20 @@ def prepare_data(model: Model, objects_path='.') -> LinearExpr:
         for v in vaccine_types for p in vaccination_points for a in airports for r in routes
     }
 
+    vaccine_point_routes = {
+        vpaname: [
+            rvpa['route']
+            for rvpa in route_vaccine_point_combinations.values()
+            if rvpa['airport'] == vpa['airport']
+            and rvpa['point'] == vpa['point']
+            and rvpa['vaccine'] == vpa['vaccine']
+        ] for vpaname, vpa in vaccine_point_combinations.items()
+    }
+
     truck_route_times = {
-        r + t: route_time_for_truck(route, truck) for t, truck in truck_types.items() for r, route in routes.items()
+        r + t: route_time_for_truck(route, truck)
+        for t, truck in truck_types.items()
+        for r, route in routes.items()
     }
 
     # Decision variables ##
@@ -92,51 +107,39 @@ def prepare_data(model: Model, objects_path='.') -> LinearExpr:
         for tr, amount in truck_routes.items()
     )
 
-    # TODO: this has to be dependant what trucks are travelling the total route
-    # Travel times of each vaccine source-destination type
-    # vaccine_travel_times = {
-    #     vpname: model.sum(
-    #         model.min(vaccine_point_quantities[rvpname], 1)
-    #         *
-    #         model.max(
-    #             truck_route_times[tr]
-    #             for tr in truck_routes
-    #             if truck_route_combinations[tr]['route'] == rvp['route']
-    #         )
-    #         for rvpname, rvp in route_vaccine_point_combinations.items()
-    #         if rvp['vaccine_point'] == vpname
-    #     ) for vpname in vaccine_point_combinations
-    # }
+    # Time taken for a vaccine to travel from an airport to a vaccination point
+    vaccine_travel_times = {
+        vpaname: model.sum(
+            model.max(
+                model.min(amount, 1) * truck_route_times[tr]
+                for tr, amount in truck_routes.items()
+                if truck_route_combinations[tr]['route'] == r
+            )
+            for r in vparoutes
+        )
+        for vpaname, vparoutes in vaccine_point_routes.items()
+    }
 
     # Constraints ##
 
-    # TODO: time constraint
     # Vaccine travel time is lower or equal to its travel lifetime
-    # for vpname, vp in vaccine_point_combinations.items():
-    #     model.add_constraint(
-    #         vaccine_travel_times[vpname]
-    #         <=
-    #         vaccine_types[vp['vaccine']]['lifetime'],
-    #         ctname="ct_vaccine_travel_time"
-    #     )
+    for vpname, vp in vaccine_point_combinations.items():
+        model.add_constraint(
+            vaccine_travel_times[vpname]
+            <=
+            vaccine_types[vp['vaccine']]['lifetime'],
+            ctname="ct_vaccine_travel_time"
+        )
 
     # Routes from airports can have at most the delivery amount of the airport
     #   of any vaccine type
     for pname, point in airports.items():
-        print([
-                rvpaname
-                for rvpaname, rvpa in route_vaccine_point_combinations.items()
-                if rvpa['airport'] == pname
-                and rvpa['route'] in point_edge_lookup[pname]['out'] 
-        ])
-        print(point['deliveryAmount'])
         model.add_constraint(
             model.sum(
                 vaccine_point_quantities[rvpaname]
                 for rvpaname, rvpa in route_vaccine_point_combinations.items()
                 if rvpa['airport'] == pname
                 and rvpa['route'] in point_edge_lookup[pname]['out']
-                # vaccine_quantities[r] for r in point_edge_lookup[pname]['out']
             )
             <=
             point['deliveryAmount'],
@@ -148,10 +151,10 @@ def prepare_data(model: Model, objects_path='.') -> LinearExpr:
     for pname, point in vaccination_points.items():
         model.add_constraint(
             model.sum(
-                vaccine_point_quantities[vpraname]
-                for vpraname, vpra in route_vaccine_point_combinations.items()
-                if vpra['route'] in point_edge_lookup[pname]['in']
-                and vpra['point'] == pname
+                vaccine_point_quantities[r + vpaname]
+                for r in point_edge_lookup[pname]['in']
+                for vpaname, vpa in vaccine_point_combinations.items()
+                if vpa['point'] == pname
             )
             >=
             point['demand'],
@@ -191,13 +194,53 @@ def prepare_data(model: Model, objects_path='.') -> LinearExpr:
             ctname='ct_truck_capacity_at_least' + r
         )
 
+    # Amount of point destined routes from airports have to be equal
+    for aname in airports:
+        model.add_constraint(
+            model.sum(
+                vaccine_point_quantities[rvpaname]
+                for rvpaname, rvpa in route_vaccine_point_combinations.items()
+                if rvpa['route'] in point_edge_lookup[aname]['out']
+                and rvpa['airport'] == aname
+            )
+            ==
+            model.sum(
+                vaccine_point_quantities[rvpaname]
+                for ppname in vaccination_points
+                for rvpaname, rvpa in route_vaccine_point_combinations.items()
+                if rvpa['route'] in point_edge_lookup[ppname]['in']
+                and rvpa['airport'] == aname
+            ),
+            ctname='ct_vaccine_source_types_equal'
+        )
+
+    # Amount of airport sourced routes to points have to be equal
+    for vname in vaccination_points:
+        model.add_constraint(
+            model.sum(
+                vaccine_point_quantities[rvpaname]
+                for rvpaname, rvpa in route_vaccine_point_combinations.items()
+                if rvpa['route'] in point_edge_lookup[vname]['in']
+                and rvpa['point'] == vname
+            )
+            ==
+            model.sum(
+                vaccine_point_quantities[rvpaname]
+                for aaname in airports
+                for rvpaname, rvpa in route_vaccine_point_combinations.items()
+                if rvpa['route'] in point_edge_lookup[aaname]['out']
+                and rvpa['point'] == vname
+            ),
+            ctname="ct_vaccine_dest_types_equal"
+        )
+
     # Objective function - cost of the distribution ##
 
     f = trucks_rent_cost
 
     return f, [
-        # lambda: print(
-        # [[aname, a.solution_value] for aname, a in vaccine_travel_times.items()])
+        lambda: print(
+            [[aname, a.solution_value] for aname, a in vaccine_travel_times.items()])
     ]
 
 
